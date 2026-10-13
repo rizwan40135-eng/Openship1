@@ -19,7 +19,7 @@ They build before changing the running service. Requires Linux, Node 22+, Bun
 
 ```bash
 git clone --branch feat/apache-front-proxy \
-  https://github.com/rizwan40135-eng/Openship1.git /root/openship-apache
+  https://github.com/rizwan40135-eng/openship.git /root/openship-apache
 cd /root/openship-apache
 bun install --frozen-lockfile
 bun run build:cli
