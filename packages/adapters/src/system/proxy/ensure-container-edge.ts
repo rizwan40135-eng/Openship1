@@ -51,6 +51,7 @@ import {
 } from "./detect";
 import { completeEdgeTakeover, rollbackEdgeTakeover } from "./takeover-journal";
 import { ensureEdgeClear } from "./consent";
+import { edgeListeners } from "../../infra/edge-listeners";
 
 function log(message: string, level: SystemLog["level"] = "info"): SystemLog {
   return { timestamp: new Date().toISOString(), message, level };
@@ -338,6 +339,11 @@ export function buildEdgeRunCommand(
     "docker run -d",
     `--name ${sq(container)}`,
     "--network host",
+    ...(edgeListeners().behindProxy ? [
+      "-e OPENSHIP_EDGE_BEHIND_PROXY=true",
+      `-e OPENSHIP_EDGE_HTTP_PORT=${edgeListeners().http}`,
+      `-e OPENSHIP_EDGE_HTTPS_PORT=${edgeListeners().https}`,
+    ] : []),
     "--restart unless-stopped",
     ...DEFAULT_CONTAINER_LOG_ARGS,
     mounts,
@@ -449,14 +455,14 @@ export async function verifyEdgeServing(
     }
   }
 
-  const listening = await waitForPortListening(executor, 80, { timeoutMs: opts.timeoutMs ?? 0 });
+  const listening = await waitForPortListening(executor, edgeListeners().http, { timeoutMs: opts.timeoutMs ?? 0 });
   if (listening.checked && !listening.listening) {
     // Prefer the container's own `[emerg]`: "nothing is listening" is the symptom,
     // `bind() … Address already in use` is the thing the operator can act on.
     const reason = await edgeCrashReason(executor, container);
     return {
       serving: false,
-      reason: reason ?? "the edge container is up but nothing is listening on :80",
+      reason: reason ?? `the edge container is up but nothing is listening on :${edgeListeners().http}`,
     };
   }
 

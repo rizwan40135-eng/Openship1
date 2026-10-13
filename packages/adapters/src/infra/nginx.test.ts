@@ -308,6 +308,23 @@ const PROXY: RouteConfig = {
 const OURS: RouteConfig = { ...PROXY, terminatesTlsLocally: true };
 const BOOTSTRAP_DIR = "/etc/letsencrypt/openship-bootstrap/app.example.com";
 
+test("Apache front proxy: route only binds loopback and retains HTTPS forwarding", async () => {
+  vi.stubEnv("OPENSHIP_EDGE_BEHIND_PROXY", "true");
+  try {
+    const { nginx, conf } = setup({ provider: { containerEdge: true } });
+    await nginx.registerRoute({ ...PROXY, tls: false });
+    const config = conf("app-example-com")!;
+    expect(config).toContain("listen 127.0.0.1:9080;");
+    expect(config).not.toMatch(/listen (80|443)[ ;]/);
+    expect(config).toContain("proxy_pass http://127.0.0.1:3009");
+    expect(config).toContain("proxy_set_header Host $host;");
+    expect(config).toContain('if ($http_x_forwarded_proto = "https")');
+    expect(config).not.toContain("ssl_certificate ");
+  } finally {
+    vi.unstubAllEnvs();
+  }
+});
+
 describe("NginxProvider path-only routes", () => {
   test.each([false, true])("returns 404 outside explicit paths (existing TLS cert: %s)", async (withCert) => {
     const { nginx, conf, files } = setup({ certDomains: withCert ? ["app.example.com"] : [] });

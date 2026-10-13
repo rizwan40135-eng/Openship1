@@ -16,6 +16,7 @@
  */
 
 import { reportCaughtError as observeCaughtError, diagnostics as errorDiagnostics } from "@repo/core/diagnostics";
+import { edgeListenerConfig } from "./edge-listeners";
 import {
   access as fsAccess,
   writeFile as fsWriteFile,
@@ -1322,6 +1323,7 @@ export class NginxProvider implements RoutingProvider, SslProvider {
   // ── File operation helpers (dual-path: local or remote) ──────────────
 
   private async _writeFile(path: string, content: string, mode?: number): Promise<void> {
+    if (path.endsWith(".conf")) content = edgeListenerConfig(content);
     // Random suffix (not just pid+ms) so two same-ms writes to the same conf
     // can't collide on the temp path and defeat the atomic rename.
     const tmpPath = `${path}.tmp-${process.pid}-${Date.now()}-${randomBytes(4).toString("hex")}`;

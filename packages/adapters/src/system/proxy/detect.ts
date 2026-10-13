@@ -36,7 +36,9 @@ import type {
   ProxyKind,
 } from "../types";
 
-const EDGE_PORTS = [80, 443] as const;
+import { edgeListeners } from "../../infra/edge-listeners";
+
+const edgePorts = () => { const ports = edgeListeners(); return [ports.http, ports.https]; };
 
 /** Thrown when a foreign owner holds 80/443 and no policy authorizes takeover. */
 export class EdgeConflictError extends AppError {
@@ -531,7 +533,7 @@ export async function probeEdge(executor: CommandExecutor): Promise<EdgeStatus> 
   const containerRunning = Boolean(container) && !(await edgeIsBroken(executor, container!));
 
   const occupants: EdgeOccupant[] = [];
-  for (const port of EDGE_PORTS) {
+  for (const port of edgePorts()) {
     const occ = await probeEdgePort(executor, port, { containerRunning });
     if (occ) occupants.push(occ);
   }
@@ -657,7 +659,7 @@ export async function freeEdgeTargets(
   // are what we were freeing.
   const named = [...new Set(targets.map((t) => t.port).filter((p): p is number => typeof p === "number"))];
   const stillBound: number[] = [];
-  for (const port of named.length ? named : [...EDGE_PORTS]) {
+  for (const port of named.length ? named : edgePorts()) {
     const { free, checked } = await waitForPortFree(executor, port, {
       ...(opts.timeoutMs === undefined ? {} : { timeoutMs: opts.timeoutMs }),
     });

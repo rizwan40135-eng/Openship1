@@ -1,4 +1,6 @@
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
+
+afterEach(() => vi.unstubAllEnvs());
 
 import {
   buildEdgeRunCommand,
@@ -231,16 +233,26 @@ describe("resolveEdgeImage", () => {
   });
 
   it("falls back to registry + version", () => {
-    const prev = { ...process.env };
-    process.env.OPENSHIP_IMAGE_REGISTRY = "docker.io/oblien";
-    process.env.OPENSHIP_VERSION = "9.9.9";
-    delete process.env.OPENSHIP_EDGE_IMAGE;
+    vi.stubEnv("OPENSHIP_IMAGE_REGISTRY", "docker.io/oblien");
+    vi.stubEnv("OPENSHIP_VERSION", "9.9.9");
+    vi.stubEnv("OPENSHIP_EDGE_IMAGE", undefined);
     expect(resolveEdgeImage()).toBe("docker.io/oblien/openship-edge:9.9.9");
-    process.env = prev;
   });
 });
 
 describe("buildEdgeRunCommand", () => {
+  it("passes the internal listener configuration to the edge image", () => {
+    vi.stubEnv("OPENSHIP_EDGE_BEHIND_PROXY", "true");
+    vi.stubEnv("OPENSHIP_EDGE_HTTP_PORT", "9081");
+    try {
+      const command = buildEdgeRunCommand("openship-edge", IMAGE);
+      expect(command).toContain("-e OPENSHIP_EDGE_BEHIND_PROXY=true");
+      expect(command).toContain("-e OPENSHIP_EDGE_HTTP_PORT=9081");
+      expect(command).toContain("-e OPENSHIP_EDGE_HTTPS_PORT=9443");
+    } finally {
+      vi.unstubAllEnvs();
+    }
+  });
   it("runs host-networked with the four state mounts", () => {
     const cmd = buildEdgeRunCommand("openship-edge", IMAGE);
     // Host networking is what lets it own :80/:443 and reach apps on loopback.

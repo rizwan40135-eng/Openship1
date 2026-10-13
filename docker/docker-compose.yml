@@ -228,6 +228,10 @@ services:
     # `docker exec` into the edge fails with "No such container: openship-edge".
     # Safe here: the edge is a singleton (host networking, one per box).
     container_name: openship-edge
+    environment:
+      OPENSHIP_EDGE_BEHIND_PROXY: ${OPENSHIP_EDGE_BEHIND_PROXY:-false}
+      OPENSHIP_EDGE_HTTP_PORT: ${OPENSHIP_EDGE_HTTP_PORT:-9080}
+      OPENSHIP_EDGE_HTTPS_PORT: ${OPENSHIP_EDGE_HTTPS_PORT:-9443}
     restart: unless-stopped
     logging: *default-logging
     network_mode: host

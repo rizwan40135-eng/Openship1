@@ -1,0 +1,2 @@
+apps/edge/entrypoint.sh text eol=lf
+scripts/test-apache-edge.sh text eol=lf

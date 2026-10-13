@@ -8,6 +8,7 @@ import {
 } from "../runtime/port-conflict";
 import { sq } from "../system/local-shell";
 import type { OpenRestyPaths } from "./openresty-lua";
+import { edgeListeners } from "./edge-listeners";
 
 const NGINX_MASTER_RE = /\b(?:nginx|openresty)\s*:\s*master process/i;
 const NGINX_WORKER_RE = /\b(?:nginx|openresty)\s*:\s*worker process/i;
@@ -140,8 +141,8 @@ export async function reloadBareOpenResty(
   });
 
   const listenerStates = await Promise.all([
-    probeListeningPortOwners(executor, 80),
-    probeListeningPortOwners(executor, 443),
+    probeListeningPortOwners(executor, edgeListeners().http),
+    probeListeningPortOwners(executor, edgeListeners().https),
   ]);
   if (listenerStates.some((state) => !state.checked)) {
     throw new Error(
