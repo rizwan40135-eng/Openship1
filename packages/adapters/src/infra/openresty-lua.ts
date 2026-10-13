@@ -31,7 +31,6 @@
  */
 
 import { reportCaughtError as observeCaughtError, diagnostics as errorDiagnostics } from "@repo/core/diagnostics";
-import { edgeListenerConfig } from "./edge-listeners";
 import { answered, refused, safeErrorMessage } from "@repo/core";
 import { createHash, randomBytes } from "node:crypto";
 import { existsSync, readFileSync } from "node:fs";
@@ -484,7 +483,7 @@ export async function ensureOpenRestyConfig(
   // freezes every later route change on the box.
   const defaultCert = await ensureEdgeDefaultCert(executor, paths.confDir);
   await executor.writeFile(`${paths.sitesDir}/_management.conf`, MANAGEMENT_BLOCK);
-  await executor.writeFile(`${paths.sitesDir}/_default.conf`, edgeListenerConfig(edgeDefaultCatchAllConf(defaultCert)));
+  await executor.writeFile(`${paths.sitesDir}/_default.conf`, edgeDefaultCatchAllConf(defaultCert));
 
   // Bootstrap: if nginx.conf doesn't exist (e.g. after a reinstall that
   // removed the old config), write a minimal working config.
@@ -1174,7 +1173,7 @@ export async function deployLuaScripts(
   // Written BEFORE the include is added: nginx -t fails on a missing include, and a
   // failed test means the reload is refused and no routing change lands at all.
   const realIpPath = `${paths.confDir}/${EDGE_REAL_IP_CONF_NAME}`;
-  await executor.writeFile(realIpPath, edgeListenerConfig(edgeRealIpConf()));
+  await executor.writeFile(realIpPath, edgeRealIpConf());
   await executor.exec(
     `grep -q '${EDGE_REAL_IP_CONF_NAME}' '${paths.confPath}' || ` +
       `sed -i '/http *{/a \\    include ${realIpPath};' '${paths.confPath}'`,

@@ -96,9 +96,6 @@ RUN mkdir -p /usr/local/openresty/nginx/conf/openship-default-cert && \
 RUN openresty -t
 
 EXPOSE 80 443
-COPY apps/edge/entrypoint.sh /usr/local/bin/openship-edge-entrypoint
-RUN chmod 755 /usr/local/bin/openship-edge-entrypoint
-ENTRYPOINT ["/usr/local/bin/openship-edge-entrypoint"]
 # Graceful OpenResty stop.
 STOPSIGNAL SIGQUIT
 CMD ["openresty", "-g", "daemon off;"]

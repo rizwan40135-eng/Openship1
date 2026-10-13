@@ -633,10 +633,6 @@ ${edgeVolumeYaml("      ")}
     # which silently migrated 0 sites after the operator's proxy was stopped.
     # Safe here: the edge is a singleton (host networking, one per box).
     container_name: openship-edge
-  environment:
-    OPENSHIP_EDGE_BEHIND_PROXY: \${OPENSHIP_EDGE_BEHIND_PROXY:-false}
-    OPENSHIP_EDGE_HTTP_PORT: \${OPENSHIP_EDGE_HTTP_PORT:-9080}
-    OPENSHIP_EDGE_HTTPS_PORT: \${OPENSHIP_EDGE_HTTPS_PORT:-9443}
     restart: unless-stopped
     logging: *default-logging
     network_mode: host
@@ -2523,9 +2519,6 @@ function keepConfig(
 }
 
 const ACME_ENV_KEYS = [
-  "OPENSHIP_EDGE_BEHIND_PROXY",
-  "OPENSHIP_EDGE_HTTP_PORT",
-  "OPENSHIP_EDGE_HTTPS_PORT",
   "OPENSHIP_ACME_EMAIL",
   "OPENSHIP_ACME_DIRECTORY_URL",
   "OPENSHIP_ACME_EAB_KID",

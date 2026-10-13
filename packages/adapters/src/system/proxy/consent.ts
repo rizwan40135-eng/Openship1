@@ -17,7 +17,6 @@ import type {
 import { EdgeConflictError, EdgeMigrateRequested, probeEdge } from "./detect";
 import { beginEdgeTakeover, rollbackEdgeTakeover } from "./takeover-journal";
 import { importSites } from "./index";
-import { edgeListeners } from "../../infra/edge-listeners";
 
 function log(message: string, level: SystemLog["level"] = "info"): SystemLog {
   return { timestamp: new Date().toISOString(), message, level };
@@ -52,13 +51,6 @@ export async function ensureEdgeClear(
 ): Promise<{ tookOver: boolean; status: EdgeStatus }> {
   const status = await probeEdge(executor);
   if (status.canProceedClean) return { tookOver: false, status };
-  if (edgeListeners().behindProxy) {
-    throw new AppError(
-      "An internal edge port is occupied. Choose unused OPENSHIP_EDGE_HTTP_PORT/OPENSHIP_EDGE_HTTPS_PORT values; front-proxy mode never takes over another service.",
-      409,
-      "EDGE_CONFLICT",
-    );
-  }
 
   // Journaled, and proven. `beginEdgeTakeover` snapshots how to restore what it's
   // about to stop (so the caller's failure path can put it back, and so a crash

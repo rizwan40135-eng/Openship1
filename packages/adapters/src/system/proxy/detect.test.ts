@@ -1,4 +1,4 @@
-import { describe, expect, test, vi } from "vitest";
+import { describe, expect, test } from "vitest";
 import type { CommandExecutor } from "../../types";
 import {
   detectEdgeContainer,
@@ -30,21 +30,6 @@ function psLine(name: string, image: string): string {
 }
 
 describe("probeEdge classification", () => {
-  test("front-proxy preflight probes only internal ports, leaving Apache unexamined", async () => {
-    vi.stubEnv("OPENSHIP_EDGE_BEHIND_PROXY", "true");
-    const commands: string[] = [];
-    try {
-      invalidateEdgeContainer();
-      await probeEdge({ exec: async (command: string) => { commands.push(command); return ""; } } as CommandExecutor);
-      expect(commands.join("\n")).toContain("9080");
-      expect(commands.join("\n")).toContain("9443");
-      expect(commands.join("\n")).not.toMatch(/(?:sport\s*=\s*:|tcp:)(80|443)\b/);
-      expect(commands.join("\n")).not.toMatch(/systemctl (?:stop|disable)/);
-    } finally {
-      invalidateEdgeContainer();
-      vi.unstubAllEnvs();
-    }
-  });
   test("free when nothing listens on 80/443", async () => {
     const status = await probeEdge(makeExecutor([]));
     expect(status.classification).toBe("free");
