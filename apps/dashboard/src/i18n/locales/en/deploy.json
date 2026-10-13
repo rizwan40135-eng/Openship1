@@ -23,7 +23,7 @@
     "routeCustomLabel": "Custom domain",
     "routeCustomDesc": "Point your own domain at this deployment.",
     "routeNoneLabel": "None",
-    "routeNoneDesc": "No public URL — internal only. Reach it by port on the host."
+    "routeNoneDesc": "No OpenShip URL or edge routing. The production port is published on 127.0.0.1 for your reverse proxy."
   },
   "dns": {
     "title": "DNS Configuration",

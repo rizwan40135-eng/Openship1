@@ -34,6 +34,7 @@ const mocks = vi.hoisted(() => ({
   promptUser: vi.fn(),
   cancelPendingPrompt: vi.fn(),
   ensureRoutingReady: vi.fn(),
+  listTargetPinnedHostPorts: vi.fn(),
   prepareTargetPinnedHostPorts: vi.fn(),
   allocateAndReservePinnedHostPort: vi.fn(),
   suggestAlternativePinnedHostPort: vi.fn(),
@@ -289,7 +290,7 @@ vi.mock("@repo/platform/engine/lib/ssh-manager", () => ({
   sshManager: { withHostExecutor: (...args: unknown[]) => mocks.sshWithHostExecutor(...args) },
 }));
 vi.mock("@repo/platform/engine/modules/deployments/pinned-host-ports", () => ({
-  listTargetPinnedHostPorts: vi.fn(async () => []),
+  listTargetPinnedHostPorts: (...args: unknown[]) => mocks.listTargetPinnedHostPorts(...args),
   prepareTargetPinnedHostPorts: (...args: unknown[]) => mocks.prepareTargetPinnedHostPorts(...args),
   allocateAndReservePinnedHostPort: (...args: unknown[]) =>
     mocks.allocateAndReservePinnedHostPort(...args),
@@ -329,7 +330,7 @@ function allocatePinnedHostPort(input: {
 }
 
 import { repos, type Deployment } from "@repo/db";
-import { ensurePortAvailable, isMultiServiceRuntime } from "@repo/adapters";
+import { allocateHostPort, ensurePortAvailable, isMultiServiceRuntime } from "@repo/adapters";
 import { firePreDeployBackups } from "@repo/platform/engine/modules/backups/triggers/pre-deploy";
 import { executeComposePipeline, resolveProjectServicePreflightServices, shouldUseProjectServicePipeline } from "@repo/platform/engine/modules/deployments/compose/index";
 import { CloudBuildAdmissionDeferredError, releaseCloudBuildSlot, runOutsideCloudBuildActivity } from "@repo/platform/engine/lib/cloud-build-activity";
@@ -513,6 +514,7 @@ describe("single-app prebuilt release-image pipeline", () => {
     mocks.reportPipelineError.mockResolvedValue(undefined);
     mocks.onDeploymentReady.mockResolvedValue(undefined);
     mocks.ensureRoutingReady.mockResolvedValue({ edgeDown: false });
+    mocks.listTargetPinnedHostPorts.mockResolvedValue([]);
     mocks.prepareTargetPinnedHostPorts.mockResolvedValue([]);
     mocks.allocateAndReservePinnedHostPort.mockImplementation(allocatePinnedHostPort);
     mocks.reserveTargetPinnedHostPort.mockImplementation(async (_target, claim) => claim);
@@ -1346,7 +1348,11 @@ describe("single-app prebuilt release-image pipeline", () => {
     }
   });
 
-  it("inventories migrated edge routes before reserving a loopback host port", async () => {
+  it("publishes a domainless app on its requested port without preparing the edge", async () => {
+    mocks.allocateAndReservePinnedHostPort.mockImplementationOnce(async (input) => {
+      await input.allocate({ avoid: new Set<number>() });
+      return allocatePinnedHostPort(input);
+    });
     mocks.runDeployPipeline.mockImplementationOnce(async (env, input) => {
       await env.preflight(input.config, async () => "migrate");
       const result = await env.activate(input.config, () => undefined);
@@ -1360,14 +1366,19 @@ describe("single-app prebuilt release-image pipeline", () => {
     await run(deployment(), { routeStrategy: "loopback-port" });
     await vi.waitFor(() => expect(mocks.onSuccess).toHaveBeenCalledTimes(1));
 
-    expect(mocks.ensureRoutingReady).toHaveBeenCalledTimes(1);
-    expect(mocks.prepareTargetPinnedHostPorts).toHaveBeenCalledTimes(1);
+    expect(mocks.ensureRoutingReady).not.toHaveBeenCalled();
+    expect(mocks.prepareTargetPinnedHostPorts).not.toHaveBeenCalled();
+    expect(mocks.listTargetPinnedHostPorts).toHaveBeenCalledTimes(1);
     expect(mocks.allocateAndReservePinnedHostPort).toHaveBeenCalledTimes(1);
-    expect(mocks.ensureRoutingReady.mock.invocationCallOrder[0]).toBeLessThan(
-      mocks.prepareTargetPinnedHostPorts.mock.invocationCallOrder[0]!,
-    );
-    expect(mocks.prepareTargetPinnedHostPorts.mock.invocationCallOrder[0]).toBeLessThan(
+    expect(mocks.listTargetPinnedHostPorts.mock.invocationCallOrder[0]).toBeLessThan(
       mocks.allocateAndReservePinnedHostPort.mock.invocationCallOrder[0]!,
+    );
+    expect(mocks.allocateAndReservePinnedHostPort).toHaveBeenCalledWith(
+      expect.objectContaining({ cachedPreferred: 8080 }),
+    );
+    expect(allocateHostPort).toHaveBeenCalledWith(
+      resolvedPlatform.platform.executor,
+      expect.objectContaining({ rangeStart: 8080, rangeEnd: 8080 }),
     );
     expect(mocks.deploy).toHaveBeenCalledWith(
       expect.objectContaining({ hostPort: 30_000 }),
@@ -1553,22 +1564,10 @@ describe("single-app prebuilt release-image pipeline", () => {
     );
   });
 
-  it("protects a bare explicit container-ip deploy from stale edge ports before activation", async () => {
+  it("keeps a domainless bare deploy independent from edge inventory", async () => {
     // Bare still binds the target host's loopback namespace. The user-facing
     // strategy cannot turn that physical topology into a container bridge.
     resolvedRuntime.name = "bare";
-    mocks.prepareTargetPinnedHostPorts.mockResolvedValue([
-      {
-        id: "hpc_quarantine_20000",
-        targetKey: "local",
-        projectId: "__openship_host_port_quarantine__",
-        serviceId: null,
-        containerPort: null,
-        port: 20_000,
-        createdAt: new Date(0),
-        updatedAt: new Date(0),
-      },
-    ]);
     mocks.runDeployPipeline.mockImplementationOnce(async (env, input) => {
       await env.preflight(input.config, async () => "migrate");
       const result = await env.activate(input.config, () => undefined);
@@ -1583,7 +1582,8 @@ describe("single-app prebuilt release-image pipeline", () => {
     await vi.waitFor(() => expect(mocks.onSuccess).toHaveBeenCalledTimes(1));
 
     expect(mocks.withHostPortTargetLock).toHaveBeenCalledTimes(1);
-    expect(mocks.prepareTargetPinnedHostPorts).toHaveBeenCalledTimes(1);
+    expect(mocks.prepareTargetPinnedHostPorts).not.toHaveBeenCalled();
+    expect(mocks.listTargetPinnedHostPorts).toHaveBeenCalledTimes(1);
     expect(mocks.allocateAndReservePinnedHostPort).not.toHaveBeenCalled();
     expect(mocks.reserveTargetPinnedHostPort).toHaveBeenCalledWith(
       { targetKey: "local", legacyTargetKeys: [], stable: true },
@@ -1594,7 +1594,7 @@ describe("single-app prebuilt release-image pipeline", () => {
         port: 8080,
       },
     );
-    expect(mocks.prepareTargetPinnedHostPorts.mock.invocationCallOrder[0]).toBeLessThan(
+    expect(mocks.listTargetPinnedHostPorts.mock.invocationCallOrder[0]).toBeLessThan(
       mocks.reserveTargetPinnedHostPort.mock.invocationCallOrder[0]!,
     );
     expect(mocks.reserveTargetPinnedHostPort.mock.invocationCallOrder[0]).toBeLessThan(

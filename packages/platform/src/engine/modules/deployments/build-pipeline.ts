@@ -118,6 +118,7 @@ import {
   convergeTargetHostPortClaims,
   convergeTargetHostPortClaimsUnlocked,
   findOwnedPinnedHostPort,
+  listTargetPinnedHostPorts,
   prepareTargetPinnedHostPorts,
   reserveTargetPinnedHostPort,
   releaseNewPinnedHostPortClaims,
@@ -1720,7 +1721,7 @@ function buildDeployEnvironment(
             // deploys and runs on its port; routing is flagged action-required
             // and retried later (route registration below is also best-effort).
             try {
-              if (plannedDomains.length > 0 || deps.prepareHostPorts) {
+              if (plannedDomains.length > 0) {
                 // Routing needs OpenResty on 80/443. If a foreign proxy already
                 // holds them, HOLD the deploy and prompt (migrate / take over /
                 // cancel) — the same session prompt flow used for port conflicts.
@@ -1756,17 +1757,21 @@ function buildDeployEnvironment(
               // Same idea for Openship Cloud's target check: make the box able to
               // answer it now, so a free domain added later doesn't need a redeploy
               // first. Cheap and idempotent (a couple of stats once written).
-              await ensureEdgeChallengeReady(phase.project.organizationId, phase.routing, {
-                serverId: phase.serverId ?? undefined,
-                onLog: (m) => logger.log(m, "warn"),
-              });
+              if (plannedDomains.length > 0) {
+                await ensureEdgeChallengeReady(phase.project.organizationId, phase.routing, {
+                  serverId: phase.serverId ?? undefined,
+                  onLog: (m) => logger.log(m, "warn"),
+                });
+              }
               // Bring the box's OTHER vhosts up to this build's shape while we're here.
               // This project's own routes are rewritten by the deploy anyway; the ones
               // that need it are the projects nobody is redeploying, which is where a
               // generated-config fix otherwise never lands. No-op once converged.
-              await repairEdgeVhosts(phase.routing, {
-                onLog: (m, level) => logger.log(m, level ?? "info"),
-              });
+              if (plannedDomains.length > 0) {
+                await repairEdgeVhosts(phase.routing, {
+                  onLog: (m, level) => logger.log(m, level ?? "info"),
+                });
+              }
             } catch (err) {
               observeCaughtError(err, "platform/engine/modules/deployments/build-pipeline");
               logger.log(
@@ -2208,6 +2213,7 @@ async function executeServerDeploy(phase: DeployPhaseInputs, deployConfig: Deplo
   > = [];
   const needsHostLoopbackClaim =
     usesManagedRouting && usesHostLoopback && !isStaticFileServe && !isWorker && phase.effectiveTarget !== "cloud";
+  const domainlessPortOnly = routeState.publicEndpoints.length === 0;
   if (needsHostLoopbackClaim && (!phase.hostPortTarget || !phase.targetExecutor)) {
     throw new Error("Cannot inspect routed host ports without a physical target executor");
   }
@@ -2223,10 +2229,15 @@ async function executeServerDeploy(phase: DeployPhaseInputs, deployConfig: Deplo
         hostPortPreparation ??= (async () => {
           const target = phase.hostPortTarget!;
           const executor = phase.targetExecutor!;
-          const claims = await prepareTargetPinnedHostPorts({
-            target,
-            edgeProxy: edgeProxyFor(executor, "openresty", { ours: true }),
-          });
+          // A domainless deployment is intentionally outside OpenShip routing:
+          // Apache (or another operator-managed proxy) will dial the published
+          // loopback port directly. Do not inspect or install the OpenShip edge.
+          const claims = domainlessPortOnly
+            ? await listTargetPinnedHostPorts(target)
+            : await prepareTargetPinnedHostPorts({
+                target,
+                edgeProxy: edgeProxyFor(executor, "openresty", { ours: true }),
+              });
 
           if (runtime.name !== "bare") {
             // Durable claims are host-wide, including other organizations and
@@ -2244,13 +2255,28 @@ async function executeServerDeploy(phase: DeployPhaseInputs, deployConfig: Deplo
               // Prefer the target's reservation, not this targetless cache. The
               // helper consults claims first, so a migration cannot move source
               // ownership.
-              cachedPreferred: project.hostPort,
+              cachedPreferred: domainlessPortOnly ? snapshot.port : project.hostPort,
               allowLegacyContainerPort: true,
-              allocate: (allocationOptions) => allocateHostPort(executor, allocationOptions),
+              allocate: (allocationOptions) =>
+                allocateHostPort(
+                  executor,
+                  domainlessPortOnly
+                    ? {
+                        ...allocationOptions,
+                        rangeStart: snapshot.port,
+                        rangeEnd: snapshot.port,
+                      }
+                    : allocationOptions,
+                ),
             });
             attemptedHostPortAllocations.push(allocation);
             initialHostPortAllocation = allocation;
             pinnedHostPort = allocation.port;
+            if (domainlessPortOnly) {
+              logger.log(
+                `No domain configured — publishing the app at 127.0.0.1:${pinnedHostPort} for your external reverse proxy.\n`,
+              );
+            }
             // A scan that couldn't RUN is not "nothing is listening". Say so
             // here or the bind failure blames Docker for a host we couldn't read.
             if (!allocation.scanned) {
