@@ -40,7 +40,7 @@ export default function DocsRootLayout({ children }: { children: ReactNode }) {
       style={{ "--font-sans": FONT_SANS } as CSSProperties}
     >
       <head>
-        <link rel="icon" href="/favicon.ico" sizes="any" />
+        <link rel="icon" href="/quantzig-favicon.svg" type="image/svg+xml" />
       </head>
       <body className="min-h-screen antialiased" style={{ fontFamily: "var(--font-sans)" }}>
         {children}

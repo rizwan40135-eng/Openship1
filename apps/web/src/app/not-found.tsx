@@ -10,7 +10,7 @@ export default function NotFound() {
     <html lang="en" suppressHydrationWarning>
       <head>
         <title>Page not found — Openship</title>
-        <link rel="icon" href="/favicon.ico" sizes="any" />
+        <link rel="icon" href="/quantzig-favicon.svg" type="image/svg+xml" />
       </head>
       <body className="min-h-screen antialiased">
         <Navbar />
